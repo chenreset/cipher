@@ -3,7 +3,10 @@ package main
 import (
 	"bytes"
 	"crypto/aes"
+	"crypto/cipher"
+	"crypto/des"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -37,8 +40,14 @@ func main() {
 		open, err := file.Open()
 		defer open.Close()
 		all, err := io.ReadAll(open)
+		options := c.PostForm("options")
+		method, err := getMethod(options, key)
+		if err != nil {
+			return
+		}
+		pad := encryptFile(method, all)
 
-		err = encryptFile(key, all)
+		err = os.WriteFile("encrypt.txt", pad, 0644)
 		if err != nil {
 			fmt.Println("Error encrypting file:", err)
 			return
@@ -72,7 +81,11 @@ func main() {
 		if err != nil {
 			fmt.Println("Error read encrypt file:", err)
 		}
-		err = decryptFile(key, file)
+		m := c.Query("method")
+
+		method, err := getMethod(m, key)
+		unpad := decryptFile(method, file)
+		err = os.WriteFile("decrypt.txt", unpad, 0644)
 		if err != nil {
 			fmt.Println("Error decrypt file:", err)
 		}
@@ -87,32 +100,34 @@ func main() {
 	fmt.Println("File encrypted successfully.")
 }
 
-// 加密文件
-func encryptFile(key []byte, dst []byte) error {
-	// 创建AES加密块
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return err
+func getMethod(method string, key []byte) (cipher.Block, error) {
+	switch method {
+	case "aes":
+		return aes.NewCipher(key)
+	case "des":
+		return des.NewCipher(key)
+	default:
+		return nil, errors.New("no support")
 	}
+}
+
+// 加密文件
+func encryptFile(block cipher.Block, dst []byte) []byte {
 	pad := pkcs7Pad(dst, block.BlockSize())
-	//
 	block.Encrypt(pad, pad)
-	// 将加密后的数据写入文件
-	return os.WriteFile("encrypt.txt", pad, 0644)
+	return pad
 }
 
 // 解密文件
-func decryptFile(key []byte, dst []byte) error {
-	// 创建AES加密块
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return err
-	}
+func decryptFile(block cipher.Block, dst []byte) []byte {
 	block.Decrypt(dst, dst)
 
 	unpad, err := pkcs7Unpad(dst)
+	if err != nil {
+		fmt.Println("file upack fail")
+	}
 	// 将加密后的数据写入文件
-	return os.WriteFile("decrypt.txt", unpad, 0644)
+	return unpad
 }
 
 // PKCS#7 填充
@@ -129,8 +144,14 @@ func pkcs7Unpad(data []byte) ([]byte, error) {
 		return nil, fmt.Errorf("input data is empty")
 	}
 	padding := int(data[length-1])
-	if padding > length {
+	if padding > length || padding == 0 {
 		return nil, fmt.Errorf("invalid padding size")
+	}
+	// 检查填充字节是否正确
+	for i := len(data) - padding; i < len(data); i++ {
+		if int(data[i]) != padding {
+			return nil, errors.New("填充字节不正确")
+		}
 	}
 	return data[:length-padding], nil
 }

@@ -8,6 +8,11 @@
 <body>
 <h1>Upload a File</h1>
 <form action="/upload" method="post" enctype="multipart/form-data">
+    <label for="options">选择加密算法：</label>
+    <select id="options" name="options">
+        <option value="aes">aes</option>
+        <option value="des">des</option>
+    </select>
     <input type="file" name="file" required>
     <button type="submit">Upload</button>
 </form>
