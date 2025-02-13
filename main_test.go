@@ -146,9 +146,10 @@ func Test_decryptFile(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := decryptFile(tt.args.block, tt.args.dst); !reflect.DeepEqual(got, tt.want) {
+			if got, err := decryptFile(tt.args.block, tt.args.dst); !reflect.DeepEqual(got, tt.want) || err != nil {
 				t.Errorf("decryptFile() = %v, want %v", got, tt.want)
 			}
+
 		})
 	}
 }
