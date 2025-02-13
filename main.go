@@ -84,7 +84,7 @@ func main() {
 		m := c.Query("method")
 
 		method, err := getMethod(m, key)
-		unpad := decryptFile(method, file)
+		unpad, err := decryptFile(method, file)
 		err = os.WriteFile("decrypt.txt", unpad, 0644)
 		if err != nil {
 			fmt.Println("Error decrypt file:", err)
@@ -114,20 +114,35 @@ func getMethod(method string, key []byte) (cipher.Block, error) {
 // 加密文件
 func encryptFile(block cipher.Block, dst []byte) []byte {
 	pad := pkcs7Pad(dst, block.BlockSize())
-	block.Encrypt(pad, pad)
-	return pad
+	// 2. 创建存储加密结果的切片
+	ciphertext := make([]byte, len(pad))
+
+	// 3. 加密数据
+	for i := 0; i < len(pad); i += block.BlockSize() {
+		block.Encrypt(ciphertext[i:i+block.BlockSize()], pad[i:i+block.BlockSize()])
+	}
+
+	return ciphertext
 }
 
 // 解密文件
-func decryptFile(block cipher.Block, dst []byte) []byte {
-	block.Decrypt(dst, dst)
+func decryptFile(block cipher.Block, ciphertext []byte) ([]byte, error) {
+	if len(ciphertext)%block.BlockSize() != 0 {
+		return nil, fmt.Errorf("密文长度不是块大小的整数倍")
+	}
+	// 创建解密结果切片
+	ret := make([]byte, len(ciphertext))
+	// 根据blockSize大小解密
+	for i := 0; i < len(ciphertext); i += block.BlockSize() {
+		block.Decrypt(ret[i:i+block.BlockSize()], ciphertext[i:i+block.BlockSize()])
+	}
 
-	unpad, err := pkcs7Unpad(dst)
+	unpad, err := pkcs7Unpad(ret)
 	if err != nil {
 		fmt.Println("file upack fail")
 	}
 	// 将加密后的数据写入文件
-	return unpad
+	return unpad, nil
 }
 
 // PKCS#7 填充
